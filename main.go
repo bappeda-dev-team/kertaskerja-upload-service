@@ -128,7 +128,23 @@ func (u *Uploader) handleUpload(w http.ResponseWriter, r *http.Request) {
 	kode_opd := r.FormValue("kode_opd")
 	tahunStr := r.FormValue("tahun")
 	if userID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing user_id"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id tidak boleh kosong"})
+		return
+	}
+	if nama == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "nama tidak boleh kosong, isikan nama pengguna"})
+		return
+	}
+	if kode_opd == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "kode_opd tidak boleh kosong"})
+		return
+	}
+	if kode_subkegiatan == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "kode_subkegiatan tidak boleh kosong"})
+		return
+	}
+	if tahunStr == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tahun tidak boleh kosong"})
 		return
 	}
 	tahun, _ := strconv.Atoi(tahunStr)
@@ -216,7 +232,15 @@ func (u *Uploader) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	tahun, _ := strconv.ParseInt(tahunStr, 10, 64)
 
 	rows, err := u.db.Query(`SELECT id, user_id, nama, kode_subkegiatan, kode_opd, file_name, file_url, file_size, content_type, tahun, created_at
-                             FROM user_files WHERE kode_opd = ? AND tahun = ? ORDER BY created_at DESC LIMIT 1`, kodeOpd, tahun)
+	FROM (
+		SELECT uf.*,
+			ROW_NUMBER() OVER (PARTITION BY kode_subkegiatan ORDER BY created_at DESC) AS rn
+		FROM user_files uf
+		WHERE kode_opd = ?
+		AND tahun = ?
+	) t
+	WHERE rn = 1
+	ORDER BY created_at DESC`, kodeOpd, tahun)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

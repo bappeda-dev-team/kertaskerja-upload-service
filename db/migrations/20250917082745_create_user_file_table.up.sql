@@ -10,8 +10,5 @@ CREATE TABLE IF NOT EXISTS user_files (
        bucket VARCHAR(255) NOT NULL,
        content_type VARCHAR(255) NOT NULL,
        tahun INT,
-       kode_opd VARCHAR(255) NOT NULL,
-       kode_subkegiatan VARCHAR(255) NOT NULL,
-       kode_pemda VARCHAR(255),
        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
