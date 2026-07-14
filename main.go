@@ -253,6 +253,27 @@ func (u *Uploader) handleFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// key is an exact lookup for callers that use a deterministic object key,
+	// such as cetak-service's pokin/pemda/{pokinId}/{version}.
+	if key := r.URL.Query().Get("key"); key != "" {
+		if !validObjectKey(key) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "key tidak valid"})
+			return
+		}
+
+		file, err := u.findFileByKey(r.Context(), key)
+		if err == sql.ErrNoRows {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "file tidak ditemukan"})
+			return
+		}
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db query failed: " + err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, file)
+		return
+	}
+
 	limit := 20
 	if value := r.URL.Query().Get("limit"); value != "" {
 		parsed, err := strconv.Atoi(value)
@@ -319,6 +340,32 @@ func (u *Uploader) handleFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, files)
+}
+
+func (u *Uploader) findFileByKey(ctx context.Context, key string) (FileData, error) {
+	var file FileData
+	var extension, checksumAlgorithm, checksum, category, ownerType, ownerID, createdBy sql.NullString
+	err := u.db.QueryRowContext(ctx, `SELECT id, object_key, bucket, original_name, extension, content_type,
+		file_size, checksum_algorithm, checksum, category, owner_type, owner_id,
+		visibility, created_by
+		FROM files
+		WHERE object_key = ? AND deleted_at IS NULL`, key).Scan(
+		&file.ID, &file.ObjectKey, &file.Bucket, &file.OriginalName, &extension, &file.ContentType,
+		&file.FileSize, &checksumAlgorithm, &checksum, &category, &ownerType, &ownerID,
+		&file.Visibility, &createdBy,
+	)
+	if err != nil {
+		return FileData{}, err
+	}
+	file.Extension = extension.String
+	file.ChecksumAlgorithm = checksumAlgorithm.String
+	file.Checksum = checksum.String
+	file.Category = category.String
+	file.OwnerType = ownerType.String
+	file.OwnerID = ownerID.String
+	file.CreatedBy = createdBy.String
+	file.URL = u.publicURL(file.ObjectKey)
+	return file, nil
 }
 
 func (u *Uploader) handleUploadUser(w http.ResponseWriter, r *http.Request) {
